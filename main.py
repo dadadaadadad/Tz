@@ -861,156 +861,7 @@ user_states = {}
 def generate_coupon_code(length=8):
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
 
-# ---------- دستورات و هندلرها ----------
-async def set_bot_commands():
-    try:
-        public_commands = [
-            BotCommand(command="/start", description="شروع ربات")
-        ]
-        admin_commands = [
-            BotCommand(command="/start", description="شروع ربات"),
-            BotCommand(command="/debug_subscriptions", description="تشخیص اشتراک‌ها (ادمین)"),
-            BotCommand(command="/cleardb", description="پاک کردن دیتابیس (ادمین)"),
-            BotCommand(command="/stats", description="آمار ربات (ادمین)"),
-            BotCommand(command="/user_info", description="اطلاعات کاربران (ادمین)"),
-            BotCommand(command="/coupon", description="ایجاد کد تخفیف (ادمین)"),
-            BotCommand(command="/notification", description="ارسال اطلاعیه به کاربران (ادمین)"),
-            BotCommand(command="/backup", description="تهیه بکاپ از دیتابیس (ادمین)"),
-            BotCommand(command="/restore", description="بازیابی دیتابیس از بکاپ (ادمین)"),
-            BotCommand(command="/remove_user", description="حذف کاربر از دیتابیس (ادمین)")
-        ]
-        await application.bot.set_my_commands(public_commands)
-        await application.bot.set_my_commands(admin_commands, scope={"type": "chat", "chat_id": ADMIN_ID})
-        logging.info("Bot commands set successfully")
-    except Exception as e:
-        logging.error(f"Error setting bot commands: {e}")
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    user_id = user.id
-    username = user.username or ""
-    if not await is_user_member(user_id):
-        kb = [[InlineKeyboardButton("📢 عضویت در کانال", url=f"https://t.me/{CHANNEL_USERNAME.replace('@','')}")]]
-        await update.message.reply_text(
-            "❌ برای استفاده از ربات، ابتدا در کانال ما عضو شوید و سپس مجدد /start را بزنید.",
-            reply_markup=InlineKeyboardMarkup(kb)
-        )
-        return
-    invited_by = context.user_data.get("invited_by")
-    await ensure_user(user_id, username, invited_by)
-    await update.message.reply_text(
-        "🌐 به فروشگاه تیز VPN خوش آمدید!\n\nیک گزینه را انتخاب کنید:",
-        reply_markup=get_main_keyboard()
-    )
-    user_states.pop(user_id, None)
-
-async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    text = update.message.text if update.message.text else ""
-    logging.info(f"User {user_id} sent: '{text}', current state: {user_states.get(user_id)}")
-    if text in ["بازگشت به منو", "⬅️ بازگشت به منو"]:
-        await update.message.reply_text("🌐 منوی اصلی:", reply_markup=get_main_keyboard())
-        user_states.pop(user_id, None)
-        return
-    if user_states.get(user_id) == "awaiting_user_id_for_removal":
-        await handle_remove_user(update, context, user_id, text)
-        return
-    if user_states.get(user_id) == "awaiting_backup_file":
-        if update.message.document:
-            try:
-                file = await context.bot.get_file(update.message.document.file_id)
-                with tempfile.NamedTemporaryFile(suffix='.sql', delete=False) as tmp_file:
-                    backup_file = tmp_file.name
-                await file.download_to_drive(backup_file)
-                await update.message.reply_text("🔄 در حال بازیابی دیتابیس...")
-                success, message = await restore_database_from_backup(backup_file)
-                os.unlink(backup_file)
-                if success:
-                    await update.message.reply_text(message, reply_markup=get_main_keyboard())
-                else:
-                    await update.message.reply_text(message, reply_markup=get_main_keyboard())
-                user_states.pop(user_id, None)
-                return
-            except Exception as e:
-                logging.error(f"Error in restore process: {e}")
-                await update.message.reply_text(f"⚠️ خطا در بازیابی دیتابیس: {str(e)}", reply_markup=get_main_keyboard())
-                user_states.pop(user_id, None)
-                return
-        else:
-            await update.message.reply_text("⚠️ لطفا یک فایل بکاپ ارسال کنید.", reply_markup=get_back_keyboard())
-            return
-    state = user_states.get(user_id)
-    if state and state.startswith("awaiting_deposit_receipt_"):
-        payment_id = int(state.split("_")[-1])
-        await process_payment_receipt(update, context, user_id, payment_id, "deposit")
-        user_states.pop(user_id, None)
-        return
-    elif state and state.startswith("awaiting_subscription_receipt_"):
-        payment_id = int(state.split("_")[-1])
-        await process_payment_receipt(update, context, user_id, payment_id, "subscription")
-        user_states.pop(user_id, None)
-        return
-    elif state and state.startswith("awaiting_config_"):
-        payment_id = int(state.split("_")[-1])
-        await process_config(update, context, user_id, payment_id)
-        user_states.pop(user_id, None)
-        return
-    elif state == "awaiting_coupon_discount" and user_id == ADMIN_ID:
-        if text.isdigit():
-            discount_percent = int(text)
-            if 1 <= discount_percent <= 100:
-                coupon_code = generate_coupon_code()
-                user_states[user_id] = f"awaiting_coupon_recipient_{coupon_code}_{discount_percent}"
-                await update.message.reply_text(
-                    f"💵 کد تخفیف `{coupon_code}` با {discount_percent}% تخفیف ایجاد شد.\nبرای چه کسانی ارسال شود؟",
-                    reply_markup=get_coupon_recipient_keyboard(),
-                    parse_mode="Markdown"
-                )
-            else:
-                await update.message.reply_text("⚠️ درصد تخفیف باید بین 1 تا 100 باشد.", reply_markup=get_back_keyboard())
-        else:
-            await update.message.reply_text("⚠️ لطفا یک عدد معتبر وارد کنید.", reply_markup=get_back_keyboard())
-        return
-    elif state and state.startswith("awaiting_coupon_recipient_") and user_id == ADMIN_ID:
-        await handle_coupon_recipient(update, context, user_id, state, text)
-        return
-    elif state and state.startswith("awaiting_coupon_percent_") and user_id == ADMIN_ID:
-        await handle_coupon_percent(update, context, user_id, state, text)
-        return
-    elif state and state.startswith("awaiting_coupon_code_"):
-        await handle_coupon_code(update, context, user_id, state, text)
-        return
-    elif state == "awaiting_notification_type" and user_id == ADMIN_ID:
-        await handle_notification_type(update, context, user_id, text)
-        return
-    elif state == "awaiting_notification_target_user" and user_id == ADMIN_ID:
-        await handle_notification_target_user(update, context, user_id, text)
-        return
-    elif (state in ["awaiting_notification_text_all", "awaiting_notification_text_agents"] or 
-          (state and state.startswith("awaiting_notification_text_single_"))):
-        await handle_notification_text(update, context, user_id, state, text)
-        return
-    elif state and state.startswith("confirm_notification_") and user_id == ADMIN_ID:
-        await handle_confirm_notification(update, context, user_id, state, text)
-        return
-    elif state == "awaiting_admin_user_id_for_balance" and user_id == ADMIN_ID:
-        await handle_admin_balance_user(update, context, user_id, text)
-        return
-    elif state and state.startswith("awaiting_balance_amount_") and user_id == ADMIN_ID:
-        await handle_admin_balance_amount(update, context, user_id, state, text)
-        return
-    elif state == "awaiting_admin_user_id_for_agent" and user_id == ADMIN_ID:
-        await handle_admin_agent_user(update, context, user_id, text)
-        return
-    elif state and state.startswith("awaiting_agent_type_") and user_id == ADMIN_ID:
-        await handle_admin_agent_type(update, context, user_id, state, text)
-        return
-    # پردازش تعداد کانفیگ
-    elif state and state.startswith("awaiting_config_count_"):
-        await handle_config_count(update, context, user_id, state, text)
-        return
-    await handle_normal_commands(update, context, user_id, text)
-
+# ---------- توابع هندلر ----------
 async def handle_config_count(update, context, user_id, state, text):
     """پردازش تعداد کانفیگ وارد شده توسط کاربر"""
     try:
@@ -1019,13 +870,10 @@ async def handle_config_count(update, context, user_id, state, text):
             await update.message.reply_text("⚠️ تعداد کانفیگ باید حداقل 1 باشد. لطفا دوباره وارد کنید:", reply_markup=get_back_keyboard())
             return
         
-        # استخراج اطلاعات از state
         parts = state.split("_")
-        # state به فرم: awaiting_config_count_850000_⭐️ کانفیگ تانل ویژه | گیگی ۸۵۰
-        base_amount = int(parts[3])  # 850000
-        plan_name = "_".join(parts[4:])  # ⭐️ کانفیگ تانل ویژه | گیگی ۸۵۰
+        base_amount = int(parts[3])
+        plan_name = "_".join(parts[4:])
         
-        # محاسبه قیمت نهایی
         total_amount = base_amount * count
         plan_with_count = f"{plan_name} (x{count})"
         
@@ -1454,7 +1302,6 @@ async def handle_normal_commands(update, context, user_id, text):
         return
     if text == "⭐️ کانفیگ تانل ویژه | گیگی ۸۵۰":
         amount = 850000
-        # سوال تعداد کانفیگ
         await update.message.reply_text(
             "🔢 تعداد کانفیگ مورد نیاز خود را وارد کنید (مثال: 2):\n\n"
             "💰 قیمت هر کانفیگ: 850,000 تومان\n"
@@ -1636,10 +1483,8 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             elif ptype == "buy_subscription":
                 await context.bot.send_message(user_id, f"✅ پرداخت تایید شد. اشتراک شما (کد خرید: #{payment_id}) ارسال خواهد شد.")
                 
-                # فقط دکمه‌ها را حذف کن (بدون ادیت متن، چون پیام عکس است)
                 await query.edit_message_reply_markup(reply_markup=None)
                 
-                # ارسال یک پیام جدید با دکمه ارسال کانفیگ
                 config_keyboard = InlineKeyboardMarkup([
                     [InlineKeyboardButton("🟣 ارسال کانفیگ", callback_data=f"send_config_{payment_id}")]
                 ])
@@ -1718,6 +1563,119 @@ async def start_with_param(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             context.user_data["invited_by"] = None
     await start(update, context)
+
+# ---------- message_handler ----------
+async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    text = update.message.text if update.message.text else ""
+    logging.info(f"User {user_id} sent: '{text}', current state: {user_states.get(user_id)}")
+    
+    if text in ["بازگشت به منو", "⬅️ بازگشت به منو"]:
+        await update.message.reply_text("🌐 منوی اصلی:", reply_markup=get_main_keyboard())
+        user_states.pop(user_id, None)
+        return
+    
+    if user_states.get(user_id) == "awaiting_user_id_for_removal":
+        await handle_remove_user(update, context, user_id, text)
+        return
+    
+    if user_states.get(user_id) == "awaiting_backup_file":
+        if update.message.document:
+            try:
+                file = await context.bot.get_file(update.message.document.file_id)
+                with tempfile.NamedTemporaryFile(suffix='.sql', delete=False) as tmp_file:
+                    backup_file = tmp_file.name
+                await file.download_to_drive(backup_file)
+                await update.message.reply_text("🔄 در حال بازیابی دیتابیس...")
+                success, message = await restore_database_from_backup(backup_file)
+                os.unlink(backup_file)
+                if success:
+                    await update.message.reply_text(message, reply_markup=get_main_keyboard())
+                else:
+                    await update.message.reply_text(message, reply_markup=get_main_keyboard())
+                user_states.pop(user_id, None)
+                return
+            except Exception as e:
+                logging.error(f"Error in restore process: {e}")
+                await update.message.reply_text(f"⚠️ خطا در بازیابی دیتابیس: {str(e)}", reply_markup=get_main_keyboard())
+                user_states.pop(user_id, None)
+                return
+        else:
+            await update.message.reply_text("⚠️ لطفا یک فایل بکاپ ارسال کنید.", reply_markup=get_back_keyboard())
+            return
+    
+    state = user_states.get(user_id)
+    
+    if state and state.startswith("awaiting_deposit_receipt_"):
+        payment_id = int(state.split("_")[-1])
+        await process_payment_receipt(update, context, user_id, payment_id, "deposit")
+        user_states.pop(user_id, None)
+        return
+    elif state and state.startswith("awaiting_subscription_receipt_"):
+        payment_id = int(state.split("_")[-1])
+        await process_payment_receipt(update, context, user_id, payment_id, "subscription")
+        user_states.pop(user_id, None)
+        return
+    elif state and state.startswith("awaiting_config_"):
+        payment_id = int(state.split("_")[-1])
+        await process_config(update, context, user_id, payment_id)
+        user_states.pop(user_id, None)
+        return
+    elif state and state.startswith("awaiting_config_count_"):
+        await handle_config_count(update, context, user_id, state, text)
+        return
+    elif state == "awaiting_coupon_discount" and user_id == ADMIN_ID:
+        if text.isdigit():
+            discount_percent = int(text)
+            if 1 <= discount_percent <= 100:
+                coupon_code = generate_coupon_code()
+                user_states[user_id] = f"awaiting_coupon_recipient_{coupon_code}_{discount_percent}"
+                await update.message.reply_text(
+                    f"💵 کد تخفیف `{coupon_code}` با {discount_percent}% تخفیف ایجاد شد.\nبرای چه کسانی ارسال شود؟",
+                    reply_markup=get_coupon_recipient_keyboard(),
+                    parse_mode="Markdown"
+                )
+            else:
+                await update.message.reply_text("⚠️ درصد تخفیف باید بین 1 تا 100 باشد.", reply_markup=get_back_keyboard())
+        else:
+            await update.message.reply_text("⚠️ لطفا یک عدد معتبر وارد کنید.", reply_markup=get_back_keyboard())
+        return
+    elif state and state.startswith("awaiting_coupon_recipient_") and user_id == ADMIN_ID:
+        await handle_coupon_recipient(update, context, user_id, state, text)
+        return
+    elif state and state.startswith("awaiting_coupon_percent_") and user_id == ADMIN_ID:
+        await handle_coupon_percent(update, context, user_id, state, text)
+        return
+    elif state and state.startswith("awaiting_coupon_code_"):
+        await handle_coupon_code(update, context, user_id, state, text)
+        return
+    elif state == "awaiting_notification_type" and user_id == ADMIN_ID:
+        await handle_notification_type(update, context, user_id, text)
+        return
+    elif state == "awaiting_notification_target_user" and user_id == ADMIN_ID:
+        await handle_notification_target_user(update, context, user_id, text)
+        return
+    elif (state in ["awaiting_notification_text_all", "awaiting_notification_text_agents"] or 
+          (state and state.startswith("awaiting_notification_text_single_"))):
+        await handle_notification_text(update, context, user_id, state, text)
+        return
+    elif state and state.startswith("confirm_notification_") and user_id == ADMIN_ID:
+        await handle_confirm_notification(update, context, user_id, state, text)
+        return
+    elif state == "awaiting_admin_user_id_for_balance" and user_id == ADMIN_ID:
+        await handle_admin_balance_user(update, context, user_id, text)
+        return
+    elif state and state.startswith("awaiting_balance_amount_") and user_id == ADMIN_ID:
+        await handle_admin_balance_amount(update, context, user_id, state, text)
+        return
+    elif state == "awaiting_admin_user_id_for_agent" and user_id == ADMIN_ID:
+        await handle_admin_agent_user(update, context, user_id, text)
+        return
+    elif state and state.startswith("awaiting_agent_type_") and user_id == ADMIN_ID:
+        await handle_admin_agent_type(update, context, user_id, state, text)
+        return
+    
+    await handle_normal_commands(update, context, user_id, text)
 
 # ---------- ثبت هندلرها ----------
 application.add_handler(CommandHandler("start", start_with_param))
