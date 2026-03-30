@@ -638,7 +638,6 @@ def get_subscription_keyboard():
 def get_payment_method_keyboard():
     keyboard = [
         [KeyboardButton("🏦 کارت به کارت")],
-        [KeyboardButton("💎 پرداخت با ترون")],
         [KeyboardButton("💰 پرداخت با موجودی")],
         [KeyboardButton("⬅️ بازگشت به منو")]
     ]
