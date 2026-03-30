@@ -22,7 +22,7 @@ TOKEN = os.getenv("BOT_TOKEN")
 CHANNEL_USERNAME = "@teazvpn"
 ADMIN_ID = 5542927340
 TRON_ADDRESS = "TQxhiwDREd8rxZuyDWx3auxcpzjSi1mAJG"
-BANK_CARD = "6037 9975 9717 2684"
+BANK_CARD = "6219 8614 2845 2139"
 
 RENDER_BASE_URL = os.getenv("RENDER_EXTERNAL_URL") or os.getenv("RAILWAY_STATIC_URL") or "https://teazvpn.railway.app"
 WEBHOOK_PATH = f"/webhook/{TOKEN}"
