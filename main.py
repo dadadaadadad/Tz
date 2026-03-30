@@ -1683,8 +1683,7 @@ async def handle_normal_commands(update, context, user_id, text):
             if payment_id:
                 await update.message.reply_text(
                     f"لطفا {amount} تومان واریز کنید و فیش را ارسال کنید:\n\n"
-                    f"💎 آدرس کیف پول TRON:\n`{TRON_ADDRESS}`\n\n"
-                    f"یا\n\n🏦 شماره کارت بانکی:\n`{BANK_CARD}`\nبحق",
+                    f"🏦 شماره کارت بانکی:\n`{BANK_CARD}`\nبحق",
                     reply_markup=get_back_keyboard(),
                     parse_mode="MarkdownV2"
                 )
