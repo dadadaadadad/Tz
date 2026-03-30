@@ -198,7 +198,7 @@ ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_method TEXT;
 
 UPDATE subscriptions SET start_date = COALESCE(start_date, CURRENT_TIMESTAMP),
                         duration_days = CASE
-                            WHEN plan = '⭐️ کانفیگ تانل ویژه | گیگی ۸۵۰' THEN 30
+                            WHEN plan LIKE '⭐️ کانفیگ تانل ویژه | گیگی ۸۵۰%' THEN 30
                             ELSE 30
                         END
 WHERE start_date IS NULL OR duration_days IS NULL;
@@ -1005,7 +1005,39 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif state and state.startswith("awaiting_agent_type_") and user_id == ADMIN_ID:
         await handle_admin_agent_type(update, context, user_id, state, text)
         return
+    # پردازش تعداد کانفیگ
+    elif state and state.startswith("awaiting_config_count_"):
+        await handle_config_count(update, context, user_id, state, text)
+        return
     await handle_normal_commands(update, context, user_id, text)
+
+async def handle_config_count(update, context, user_id, state, text):
+    """پردازش تعداد کانفیگ وارد شده توسط کاربر"""
+    try:
+        count = int(text)
+        if count < 1:
+            await update.message.reply_text("⚠️ تعداد کانفیگ باید حداقل 1 باشد. لطفا دوباره وارد کنید:", reply_markup=get_back_keyboard())
+            return
+        
+        # استخراج اطلاعات از state
+        parts = state.split("_")
+        # state به فرم: awaiting_config_count_850000_⭐️ کانفیگ تانل ویژه | گیگی ۸۵۰
+        base_amount = int(parts[3])  # 850000
+        plan_name = "_".join(parts[4:])  # ⭐️ کانفیگ تانل ویژه | گیگی ۸۵۰
+        
+        # محاسبه قیمت نهایی
+        total_amount = base_amount * count
+        plan_with_count = f"{plan_name} (x{count})"
+        
+        await update.message.reply_text(
+            f"✅ {count} عدد کانفیگ با قیمت {total_amount:,} تومان\n\n"
+            f"💵 اگر کد تخفیف دارید، وارد کنید. در غیر این صورت برای ادامه روی 'ادامه' کلیک کنید:",
+            reply_markup=ReplyKeyboardMarkup([[KeyboardButton("ادامه")], [KeyboardButton("⬅️ بازگشت به منو")]], resize_keyboard=True)
+        )
+        user_states[user_id] = f"awaiting_coupon_code_{total_amount}_{plan_with_count}"
+        
+    except ValueError:
+        await update.message.reply_text("⚠️ لطفا یک عدد صحیح وارد کنید (مثال: 2):", reply_markup=get_back_keyboard())
 
 async def handle_remove_user(update, context, user_id, text):
     try:
@@ -1422,11 +1454,14 @@ async def handle_normal_commands(update, context, user_id, text):
         return
     if text == "⭐️ کانفیگ تانل ویژه | گیگی ۸۵۰":
         amount = 850000
+        # سوال تعداد کانفیگ
         await update.message.reply_text(
-            f"💵 اگر کد تخفیف دارید، وارد کنید. در غیر این صورت برای ادامه روی 'ادامه' کلیک کنید:",
-            reply_markup=ReplyKeyboardMarkup([[KeyboardButton("ادامه")], [KeyboardButton("⬅️ بازگشت به منو")]], resize_keyboard=True)
+            "🔢 تعداد کانفیگ مورد نیاز خود را وارد کنید (مثال: 2):\n\n"
+            "💰 قیمت هر کانفیگ: 850,000 تومان\n"
+            "📊 قیمت نهایی = تعداد × 850,000 تومان",
+            reply_markup=get_back_keyboard()
         )
-        user_states[user_id] = f"awaiting_coupon_code_{amount}_{text}"
+        user_states[user_id] = f"awaiting_config_count_{amount}_⭐️ کانفیگ تانل ویژه | گیگی ۸۵۰"
         return
     if user_states.get(user_id, "").startswith("awaiting_payment_method_"):
         await handle_payment_method(update, context, user_id, text)
@@ -1732,7 +1767,8 @@ async def on_startup():
                      "2️⃣ حذف بخش اعتبار رایگان\n"
                      "3️⃣ ساده‌سازی بخش درخواست نمایندگی (فقط لینک پشتیبانی)\n"
                      "4️⃣ اضافه شدن محصول جدید: ⭐️ کانفیگ تانل ویژه | گیگی ۸۵۰\n"
-                     "5️⃣ رفع مشکل خطای There is no text in the message to edit"
+                     "5️⃣ اضافه شدن قابلیت تعیین تعداد کانفیگ\n"
+                     "6️⃣ رفع مشکل خطای There is no text in the message to edit"
             )
         except Exception as e:
             logging.error(f"Error sending startup message to admin: {e}")
