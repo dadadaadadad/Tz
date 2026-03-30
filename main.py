@@ -1576,9 +1576,11 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
     query = update.callback_query
     data = query.data
     await query.answer()
+    
     if update.effective_user.id != ADMIN_ID:
         await query.edit_message_text("⚠️ شما اجازه این کار را ندارید.")
         return
+    
     try:
         if data.startswith("approve_"):
             payment_id = int(data.split("_")[1])
@@ -1586,32 +1588,39 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             if not payment:
                 await query.edit_message_text("⚠️ پرداخت یافت نشد.")
                 return
+            
             user_id, amount, ptype, description = payment
             await update_payment_status(payment_id, "approved")
+            
             if ptype == "increase_balance":
                 await add_balance(user_id, amount)
                 await context.bot.send_message(user_id, f"💰 پرداخت تایید شد. موجودی {amount} تومان اضافه شد.")
-                await query.edit_message_reply_markup(None)
+                await query.edit_message_reply_markup(reply_markup=None)
                 await query.edit_message_text("✅ پرداخت تایید شد.")
+            
             elif ptype == "buy_subscription":
                 await context.bot.send_message(user_id, f"✅ پرداخت تایید شد. اشتراک شما (کد خرید: #{payment_id}) ارسال خواهد شد.")
-                await query.edit_message_reply_markup(None)
-                await query.edit_message_text(f"✅ پرداخت #{payment_id} برای اشتراک ({description}) تایید شد.")
-                # ارسال پیام جدید با دکمه ارسال کانفیگ
+                
+                # فقط دکمه‌ها را حذف کن (بدون ادیت متن، چون پیام عکس است)
+                await query.edit_message_reply_markup(reply_markup=None)
+                
+                # ارسال یک پیام جدید با دکمه ارسال کانفیگ
                 config_keyboard = InlineKeyboardMarkup([
                     [InlineKeyboardButton("🟣 ارسال کانفیگ", callback_data=f"send_config_{payment_id}")]
                 ])
                 await context.bot.send_message(
                     chat_id=ADMIN_ID,
-                    text=f"📢 برای پرداخت #{payment_id} (کاربر {user_id} - {description})\nلطفا کانفیگ را ارسال کنید:",
+                    text=f"✅ پرداخت #{payment_id} برای اشتراک ({description}) تایید شد.\n👤 کاربر: {user_id}\n\n📤 برای ارسال کانفیگ کلیک کنید:",
                     reply_markup=config_keyboard
                 )
+            
             elif ptype == "agency_request":
                 await set_user_agent(user_id)
                 await add_balance(user_id, amount)
                 await context.bot.send_message(user_id, "✅ فیش شما تایید و نمایندگی به شما اعطا شد! ۱,۰۰۰,۰۰۰ تومان به موجودی شما اضافه شد.")
-                await query.edit_message_reply_markup(None)
+                await query.edit_message_reply_markup(reply_markup=None)
                 await query.edit_message_text("✅ درخواست نمایندگی تایید شد.")
+        
         elif data.startswith("reject_"):
             payment_id = int(data.split("_")[1])
             payment = await db_execute("SELECT user_id, amount, type FROM payments WHERE id = %s", (payment_id,), fetchone=True)
@@ -1621,8 +1630,9 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             user_id, amount, ptype = payment
             await update_payment_status(payment_id, "rejected")
             await context.bot.send_message(user_id, "❌ پرداخت شما رد شد. با پشتیبانی تماس بگیرید.")
-            await query.edit_message_reply_markup(None)
+            await query.edit_message_reply_markup(reply_markup=None)
             await query.edit_message_text("❌ پرداخت رد شد.")
+        
         elif data.startswith("send_config_"):
             payment_id = int(data.split("_")[-1])
             payment = await db_execute("SELECT user_id, description FROM payments WHERE id = %s", (payment_id,), fetchone=True)
@@ -1630,33 +1640,38 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                 await query.edit_message_text("⚠️ پرداخت یافت نشد.")
                 return
             user_id, description = payment
-            await query.edit_message_reply_markup(None)
+            await query.edit_message_reply_markup(reply_markup=None)
             await query.edit_message_text(f"✅ در انتظار دریافت کانفیگ برای پرداخت #{payment_id}\n👤 کاربر: {user_id}\n📦 محصول: {description}")
             await context.bot.send_message(
                 chat_id=ADMIN_ID,
                 text=f"📤 برای پرداخت #{payment_id} (کاربر {user_id}) لطفا کانفیگ را ارسال کنید:"
             )
             user_states[ADMIN_ID] = f"awaiting_config_{payment_id}"
+        
         elif data == "admin_balance_action":
             await query.edit_message_reply_markup(None)
             await query.edit_message_text("🆔 ایدی عددی کاربر را وارد کنید:")
             user_states[ADMIN_ID] = "awaiting_admin_user_id_for_balance"
+        
         elif data == "admin_agent_action":
             await query.edit_message_reply_markup(None)
             await query.edit_message_text("🆔 ایدی عددی کاربر را وارد کنید:")
             user_states[ADMIN_ID] = "awaiting_admin_user_id_for_agent"
+        
         elif data == "admin_remove_user_action":
             await query.edit_message_reply_markup(None)
             await query.edit_message_text("🆔 ایدی عددی کاربری که می‌خواهید حذف کنید را وارد کنید:")
             user_states[ADMIN_ID] = "awaiting_user_id_for_removal"
+        
         else:
             await query.edit_message_text("⚠️ دستور نامعتبر است.")
-    except ValueError as e:
-        logging.error(f"Error parsing callback data '{data}': {e}")
-        await query.edit_message_text(f"⚠️ خطا در پردازش دستور: {data}")
+            
     except Exception as e:
         logging.error(f"Error in admin_callback_handler: {e}")
-        await query.edit_message_text("⚠️ خطا در پردازش درخواست.")
+        try:
+            await query.edit_message_text("⚠️ خطا در پردازش درخواست.")
+        except:
+            await context.bot.send_message(chat_id=ADMIN_ID, text=f"⚠️ خطا در پردازش درخواست: {str(e)}")
 
 async def start_with_param(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args
@@ -1717,7 +1732,7 @@ async def on_startup():
                      "2️⃣ حذف بخش اعتبار رایگان\n"
                      "3️⃣ ساده‌سازی بخش درخواست نمایندگی (فقط لینک پشتیبانی)\n"
                      "4️⃣ اضافه شدن محصول جدید: ⭐️ کانفیگ تانل ویژه | گیگی ۸۵۰\n"
-                     "5️⃣ رفع مشکل نمایش دکمه ارسال کانفیگ"
+                     "5️⃣ رفع مشکل خطای There is no text in the message to edit"
             )
         except Exception as e:
             logging.error(f"Error sending startup message to admin: {e}")
