@@ -1796,7 +1796,7 @@ async def handle_payment_method(update, context, user_id, text):
                 await add_subscription(user_id, payment_id, plan)
                 await update.message.reply_text(
                     f"لطفا {amount} تومان واریز کنید و فیش را ارسال کنید:\n\n"
-                    f"🏦 شماره کارت بانکی:\n`{BANK_CARD}`\nفرهنگ",
+                    f"🏦 شماره کارت بانکی:\n`{BANK_CARD}`\nبحق",
                     reply_markup=get_back_keyboard(),
                     parse_mode="MarkdownV2"
                 )
