@@ -1595,10 +1595,9 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                 await query.edit_message_text("✅ پرداخت تایید شد.")
             elif ptype == "buy_subscription":
                 await context.bot.send_message(user_id, f"✅ پرداخت تایید شد. اشتراک شما (کد خرید: #{payment_id}) ارسال خواهد شد.")
-                # حذف دکمه‌های قبلی از پیام
                 await query.edit_message_reply_markup(None)
                 await query.edit_message_text(f"✅ پرداخت #{payment_id} برای اشتراک ({description}) تایید شد.")
-                # ارسال یک پیام جدید با دکمه ارسال کانفیگ
+                # ارسال پیام جدید با دکمه ارسال کانفیگ
                 config_keyboard = InlineKeyboardMarkup([
                     [InlineKeyboardButton("🟣 ارسال کانفیگ", callback_data=f"send_config_{payment_id}")]
                 ])
@@ -1631,10 +1630,8 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                 await query.edit_message_text("⚠️ پرداخت یافت نشد.")
                 return
             user_id, description = payment
-            # حذف دکمه از پیام فعلی
             await query.edit_message_reply_markup(None)
             await query.edit_message_text(f"✅ در انتظار دریافت کانفیگ برای پرداخت #{payment_id}\n👤 کاربر: {user_id}\n📦 محصول: {description}")
-            # درخواست کانفیگ از ادمین
             await context.bot.send_message(
                 chat_id=ADMIN_ID,
                 text=f"📤 برای پرداخت #{payment_id} (کاربر {user_id}) لطفا کانفیگ را ارسال کنید:"
