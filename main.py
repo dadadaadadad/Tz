@@ -22,6 +22,7 @@ TOKEN = os.getenv("BOT_TOKEN")
 CHANNEL_USERNAME = "@teazvpn"
 ADMIN_ID = 5542927340
 BANK_CARD = "6219 8614 2845 2139"
+CONFIG_PRICE = 950000  # قیمت هر کانفیگ 950,000 تومان
 
 RENDER_BASE_URL = os.getenv("RENDER_EXTERNAL_URL") or os.getenv("RAILWAY_STATIC_URL") or "https://teazvpn.railway.app"
 WEBHOOK_PATH = f"/webhook/{TOKEN}"
@@ -217,7 +218,7 @@ def get_back_keyboard():
     return ReplyKeyboardMarkup([[KeyboardButton("⬅️ بازگشت به منو")]], resize_keyboard=True)
 
 def get_subscription_keyboard():
-    return ReplyKeyboardMarkup([[KeyboardButton("⭐️ کانفیگ تانل ویژه | گیگی ۸۵۰")], [KeyboardButton("⬅️ بازگشت به منو")]], resize_keyboard=True)
+    return ReplyKeyboardMarkup([[KeyboardButton("⭐️ کانفیگ تانل ویژه | گیگی ۹۵۰")], [KeyboardButton("⬅️ بازگشت به منو")]], resize_keyboard=True)
 
 def get_payment_method_keyboard():
     return ReplyKeyboardMarkup([[KeyboardButton("🏦 کارت به کارت")], [KeyboardButton("💰 پرداخت با موجودی")], [KeyboardButton("⬅️ بازگشت به منو")]], resize_keyboard=True)
@@ -531,8 +532,8 @@ async def handle_config_count(update, context, user_id, state, text):
         if count < 1:
             await update.message.reply_text("⚠️ تعداد باید حداقل 1 باشد.", reply_markup=get_back_keyboard())
             return
-        total_amount = 850000 * count
-        plan_name = f"⭐️ کانفیگ تانل ویژه | گیگی ۸۵۰ (x{count})"
+        total_amount = CONFIG_PRICE * count
+        plan_name = f"⭐️ کانفیگ تانل ویژه | گیگی ۹۵۰ (x{count})"
         await update.message.reply_text(
             f"✅ {count} عدد کانفیگ با قیمت {total_amount:,} تومان\n\nبرای ادامه روی 'ادامه' کلیک کنید:",
             reply_markup=ReplyKeyboardMarkup([[KeyboardButton("ادامه")], [KeyboardButton("⬅️ بازگشت به منو")]], resize_keyboard=True)
@@ -686,9 +687,9 @@ async def handle_normal_commands(update, context, user_id, text):
             user_states.pop(user_id, None)
     elif text == "💳 خرید اشتراک":
         await update.message.reply_text("💳 پلن را انتخاب کنید:", reply_markup=get_subscription_keyboard())
-    elif text == "⭐️ کانفیگ تانل ویژه | گیگی ۸۵۰":
-        await update.message.reply_text("🔢 تعداد کانفیگ را وارد کنید (مثال: 2):\n💰 هر کانفیگ: 850,000 تومان", reply_markup=get_back_keyboard())
-        user_states[user_id] = "awaiting_config_count_850000_⭐️ کانفیگ تانل ویژه | گیگی ۸۵۰"
+    elif text == "⭐️ کانفیگ تانل ویژه | گیگی ۹۵۰":
+        await update.message.reply_text(f"🔢 تعداد کانفیگ را وارد کنید (مثال: 2):\n💰 هر کانفیگ: {CONFIG_PRICE:,} تومان", reply_markup=get_back_keyboard())
+        user_states[user_id] = f"awaiting_config_count_{CONFIG_PRICE}_⭐️ کانفیگ تانل ویژه | گیگی ۹۵۰"
     elif user_states.get(user_id, "").startswith("awaiting_payment_method_"):
         await handle_payment_method(update, context, user_id, text)
     elif text == "☎️ پشتیبانی":
